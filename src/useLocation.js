@@ -26,7 +26,7 @@ const useLocation = () => {
     getLocation();
   }, []);
 
-  return location;
+  return { location };
 }
 
 export default useLocation;

@@ -7,9 +7,32 @@ import {
 } from "@chakra-ui/react";
 import styled from "@emotion/styled";
 import useLocation from "./useLocation";
+import { useEffect } from "react";
 
 export default function Main() {
   const { location } = useLocation();
+
+  useEffect(() => {
+    const { naver } = window;
+    if (!mapElement.current || !naver) return;
+
+    // 지도에 표시할 위치의 위도와 경도 좌표를 파라미터로 넣어줍니다.
+    const location = new naver.maps.LatLng(37.5656, 126.9769);
+    const mapOptions: naver.maps.MapOptions = {
+      center: location,
+      zoom: 17,
+      zoomControl: true,
+      zoomControlOptions: {
+        position: naver.maps.Position.TOP_RIGHT,
+      },
+    };
+    const map = new naver.maps.Map(mapElement.current, mapOptions);
+    new naver.maps.Marker({
+      position: location,
+      map,
+    });
+  }, []);
+
 
   return (
     <S.Container>
@@ -23,7 +46,7 @@ export default function Main() {
           <Stack spacing={4} width={"70%"} padding="20px">
             <Card width="500px" height="40px" justifyContent={"center"} alignItems="center" backgroundColor={"#e2e2e2"}>
               <S.LocationText>
-                위치
+                <p>{JSON.stringify(location)}</p>
               </S.LocationText>
             </Card>
             <Flex alignItems={"center"} justifyContent={"space-between"}>
