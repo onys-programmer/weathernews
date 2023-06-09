@@ -10,7 +10,10 @@ import useLocation from "./useLocation";
 import { useEffect, useRef, useState } from "react";
 import convertCoordinates from "./utils/convertCoordinates";
 import formatAMPM from "./utils/formatAMPM";
-import roundToHour from "./utils/roundToHour";
+import degreeToDirection from "./utils/degreeToDirection";
+import { fetchVillageWeather, fetchYesterdayVillageWeather } from "./services/api";
+import { YESTERDAY_DATE } from "./constants/weatherConstants";
+import { refineWeatherData, refineYesterdayWeatherData } from "./utils/refine";
 
 export default function Main() {
   const initialWeather = {
@@ -21,6 +24,9 @@ export default function Main() {
     windVelocity: 1.5,
     windDirection: "남",
     precipitation: 0,
+  };
+
+  const initialPolution = {
     ultraFineDust: 21,
     fineDust: 34,
     ozone: 0.009,
@@ -29,20 +35,28 @@ export default function Main() {
   const { location } = useLocation();
   const [locationText, setLocationText] = useState(null);
   const [xy, setXY] = useState(null);
+  const [weatherResponse, setWeatherResponse] = useState(null);
   const [weather, setWeather] = useState(initialWeather);
+  const [yesterdayWeatherResponse, setYesterdayWeatherResponse] = useState(null);
+  const [yesterdayWeather, setYesterdayWeather] = useState(initialWeather);
+
+  const [polution, setPolution] = useState(initialPolution);
 
   const {
-    currentDegree,
-    yesterdayDegree,
+    degree: currentDegree,
     windChill,
     humidity,
     windVelocity,
     windDirection,
     precipitation,
+  } = weather;
+  const { degree: yesterdayDegree } = yesterdayWeather;
+
+  const {
     ultraFineDust,
     fineDust,
     ozone,
-  } = weather;
+  } = polution
 
   const mapElement = useRef(null);
 
@@ -71,28 +85,37 @@ export default function Main() {
     }
   }, [location]);
 
-  const SERVICE_KEY = 'Wt3SOL1qym0ad0vNxHFdNc%2BkA5CwBNj8y1ERFTOkaMIAfu%2BvCg1CpZZ5Rv5IH2mDunhjFJ6kJBT6%2FHQM5rFo2Q%3D%3D';
-  // BASE_DATE: YYYYMMDD format of today of our country
-  const BASE_DATE = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const BASE_TIME = roundToHour(new Date());
-  console.log(BASE_DATE, BASE_TIME);
-  const numOfRows = 100;
-  const pageNo = 1;
-  const fetchVillageWeather = async (xy) => {
-    const { x, y } = xy;
-    const response = await fetch(
-      `http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${SERVICE_KEY}&dataType=JSON&base_date=${BASE_DATE}&base_time=${BASE_TIME}&nx=${x}&ny=${y}&numOfRows=${numOfRows}&pageNo=${pageNo}`
-    );
-    const data = await response.json();
+  useEffect(() => {
+    async function fetchWeather() {
+      if (xy?.x && xy?.y) {
+        const res = await fetchVillageWeather(xy);
+        // console.log(res, 'res')
 
-    console.log(data.response);
-  };
+        setWeatherResponse(res?.response?.body?.items.item);
+        const yesterdayRes = await fetchYesterdayVillageWeather(xy, YESTERDAY_DATE);
+        // console.log(yesterdayRes, 'yes day res')
+        setYesterdayWeatherResponse(yesterdayRes?.response?.body?.items.item);
+      }
+    }
+    fetchWeather();
+  }, [xy]);
 
   useEffect(() => {
-    if (xy?.x && xy?.y) {
-      fetchVillageWeather(xy);
+    if (weatherResponse) {
+      const refinedWeather = refineWeatherData(weatherResponse);
+      // console.log(weatherResponse, 'weatherResponse')
+      setWeather(refinedWeather);
     }
-  }, [xy]);
+  }, [weatherResponse])
+
+  useEffect(() => {
+    // console.log(yesterdayWeatherResponse, 'yesterdayWeatherResponse')
+    if (yesterdayWeatherResponse) {
+      // console.log(yesterdayWeatherResponse, 'yesterdayWeatherResponse')
+      const refinedWeather = refineYesterdayWeatherData(yesterdayWeatherResponse);
+      setYesterdayWeather(refinedWeather);
+    }
+  }, [yesterdayWeatherResponse])
 
   return (
     <S.Container>
@@ -126,7 +149,7 @@ export default function Main() {
             </Flex>
             <Flex alignItems={"center"} justifyContent={"space-between"}>
               <S.SmallText><p>습도 {humidity}%</p></S.SmallText>
-              <S.SmallText><p>바람 {windDirection} {windVelocity}m/s</p></S.SmallText>
+              <S.SmallText><p>바람 {degreeToDirection(windDirection)} {windVelocity}m/s</p></S.SmallText>
               <S.SmallText><p>강수량: {precipitation === 0 ? "-" : precipitation}mm</p></S.SmallText>
             </Flex>
             <Flex alignItems={"center"} justifyContent={"space-between"}>
