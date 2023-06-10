@@ -11,9 +11,12 @@ import { useEffect, useRef, useState } from "react";
 import convertCoordinates from "./utils/convertCoordinates";
 import formatAMPM from "./utils/formatAMPM";
 import degreeToDirection from "./utils/degreeToDirection";
-import { fetchVillageWeather, fetchYesterdayVillageWeather } from "./services/api";
+import { fetchAirPollution, fetchVillageWeather, fetchYesterdayVillageWeather } from "./services/api";
 import { YESTERDAY_DATE } from "./constants/weatherConstants";
 import { refineWeatherData, refineYesterdayWeatherData } from "./utils/refine";
+import takeSidoName from "./utils/takeSidoName";
+import judgeGrade from "./utils/judgeGrade";
+import calcWindChill from "./utils/calcWindChill";
 
 export default function Main() {
   const initialWeather = {
@@ -26,10 +29,13 @@ export default function Main() {
     precipitation: 0,
   };
 
-  const initialPolution = {
+  const initialPollution = {
     ultraFineDust: 21,
+    ultraFineDustGrade: "보통",
     fineDust: 34,
+    fineDustGrade: "보통",
     ozone: 0.009,
+    ozoneGrade: "보통",
   };
 
   const { location } = useLocation();
@@ -40,11 +46,11 @@ export default function Main() {
   const [yesterdayWeatherResponse, setYesterdayWeatherResponse] = useState(null);
   const [yesterdayWeather, setYesterdayWeather] = useState(initialWeather);
 
-  const [polution, setPolution] = useState(initialPolution);
+  const [pollutionResponse, setPollutionResponse] = useState(null);
+  const [pollution, setPollution] = useState(initialPollution);
 
   const {
     degree: currentDegree,
-    windChill,
     humidity,
     windVelocity,
     windDirection,
@@ -54,11 +60,29 @@ export default function Main() {
 
   const {
     ultraFineDust,
+    ultraFineDustGrade,
     fineDust,
+    fineDustGrade,
     ozone,
-  } = polution
+    ozoneGrade,
+  } = pollution
 
   const mapElement = useRef(null);
+
+  const generateCircleColor = (grade) => {
+    switch (grade) {
+      case "좋음":
+        return "#b9d2de";
+      case "보통":
+        return "#b4d2b8";
+      case "나쁨":
+        return "#d6c0ac";
+      case "매우나쁨":
+        return "#e5bdbd";
+      default:
+        return "#dbdbdb";
+    }
+  };
 
   useEffect(() => {
     if (location?.latitude && location?.longitude) {
@@ -117,17 +141,45 @@ export default function Main() {
     }
   }, [yesterdayWeatherResponse])
 
+  useEffect(() => {
+    async function fetchPollution() {
+      if (locationText?.length > 0) {
+        const sidoName = takeSidoName(locationText);
+        const res = await fetchAirPollution(sidoName);
+        setPollutionResponse(res?.response?.body?.items[0]);
+      }
+    }
+    fetchPollution();
+  }, [locationText]);
+
+  useEffect(() => {
+    if (pollutionResponse) {
+      const { pm10Value, pm25Value, o3Value } = pollutionResponse;
+      setPollution({
+        ultraFineDust: pm25Value,
+        ultraFineDustGrade: judgeGrade('ultraFineDust', pm25Value),
+        fineDust: pm10Value,
+        fineDustGrade: judgeGrade('fineDust', pm10Value),
+        ozone: o3Value,
+        ozoneGrade: judgeGrade('ozone', o3Value),
+      });
+    }
+  }, [pollutionResponse]);
+
   return (
     <S.Container>
-      <Card margin={"0 auto"} width="100%" padding="80px 50px">
-        <Flex>
-          <Container width="30%">
+      <Card margin={"0 auto"} width="1100px" padding="50px 10px">
+        <Flex justifyContent={"space-around"}>
+          <S.SideBar>
             <Heading as="h1" size="2xl">
               Weather I
             </Heading>
-          </Container>
-          <Stack spacing={4} width={"70%"} padding="20px">
-            <Card width="500px" height="40px" justifyContent={"center"} alignItems="center" backgroundColor={"#e2e2e2"}>
+            <S.TimeText>
+              <p>({formatAMPM(new Date())})</p>
+            </S.TimeText>
+          </S.SideBar>
+          <Stack gap="30px" width={"100%"} maxW={"600px"} padding="20px">
+            <Card width="100%" height="40px" justifyContent={"center"} alignItems="center" backgroundColor={"#e2e2e2"}>
               <S.LocationText ref={mapElement}>
                 <p>{locationText}</p>
               </S.LocationText>
@@ -138,7 +190,7 @@ export default function Main() {
               </S.CurrentDegree>
               <S.MiddleText>
                 <p>
-                  체감({windChill})도
+                  체감({calcWindChill(weather)})도
                 </p>
               </S.MiddleText>
               <S.MiddleText>
@@ -147,52 +199,46 @@ export default function Main() {
                 </p>
               </S.MiddleText>
             </Flex>
-            <Flex alignItems={"center"} justifyContent={"space-between"}>
+            <Flex alignItems={"center"} justifyContent={"space-between"} gap="30px">
               <S.SmallText><p>습도 {humidity}%</p></S.SmallText>
               <S.SmallText><p>바람 {degreeToDirection(windDirection)} {windVelocity}m/s</p></S.SmallText>
               <S.SmallText><p>강수량: {precipitation === 0 ? "-" : precipitation}mm</p></S.SmallText>
             </Flex>
-            <Flex alignItems={"center"} justifyContent={"space-between"}>
-              <Stack>
-                <S.Circle>
+            <Flex alignItems={"flex-start"} justifyContent={"space-around"} border="1px solid #ebebeb" borderRadius={"10px"} padding="40px 10px">
+              <Stack gap="12px">
+                <S.Circle style={{ backgroundColor: generateCircleColor(ultraFineDustGrade) }}>
                   {ultraFineDust}µg/m³
                 </S.Circle>
                 <S.SmallText>
                   <p>초 미세먼지</p>
+                  <S.SmallP>(PM2.5)</S.SmallP>
                 </S.SmallText>
                 <S.SmallText>
-                  <p>({formatAMPM(new Date())})</p>
-                </S.SmallText>
-                <S.SmallText>
-                  <p>보통</p>
+                  <p>{ultraFineDustGrade}</p>
                 </S.SmallText>
               </Stack>
-              <Stack>
-                <S.Circle>
+              <Stack gap="12px">
+                <S.Circle style={{ backgroundColor: generateCircleColor(fineDustGrade) }}>
                   {fineDust}µg/m³
                 </S.Circle>
                 <S.SmallText>
                   <p>미세먼지</p>
+                  <S.SmallP>(PM10)</S.SmallP>
                 </S.SmallText>
                 <S.SmallText>
-                  <p>({formatAMPM(new Date())})</p>
-                </S.SmallText>
-                <S.SmallText>
-                  <p>보통</p>
+                  <p>{fineDustGrade}</p>
                 </S.SmallText>
               </Stack>
-              <Stack>
-                <S.Circle>
+              <Stack gap="12px">
+                <S.Circle style={{ backgroundColor: generateCircleColor(ozoneGrade) }}>
                   {ozone}ppm
                 </S.Circle>
                 <S.SmallText>
-                  <p>오존(O3)</p>
+                  <p>오존</p>
+                  <S.SmallP>(O₃)</S.SmallP>
                 </S.SmallText>
                 <S.SmallText>
-                  <p>좋음</p>
-                </S.SmallText>
-                <S.SmallText>
-                  <p>보통</p>
+                  <p>{ozoneGrade}</p>
                 </S.SmallText>
               </Stack>
             </Flex>
@@ -209,12 +255,17 @@ const S = {
     width: 70%;
     padding: 50px;
   `,
+  SideBar: styled.div`
+    padding-top: 15px;
+    width: 250px;
+  `,
   Circle: styled.div`
     width: fit-content;
     height: fit-content;
     padding: 20px;
     border-radius: 50%;
-    border: 1px solid black;
+    border: 1px solid #eeeeee;
+    background-color: #e2e2e2;
   `,
   CurrentDegree: styled.div`
     * {
@@ -234,8 +285,15 @@ const S = {
     border-radius: 10px;
     padding: 10px;
     text-align: center;
+    width: 100%;
     * {
       font-size: 18px;
     }
+  `,
+  TimeText: styled.div`
+    margin: 10px auto;
+  `,
+  SmallP: styled.p`
+    font-size: 14px;
   `,
 }
